@@ -1,0 +1,14 @@
+{
+  "name": "logos-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "تطبيق متابعة قراءة الكتاب المقدس - لوغُس",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -2,10 +2,96 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>لوغُس - نور الكلمة</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوغُس - صفحة اختبار مؤقتة</title>
+  <style>
+    body { font-family: Tahoma, Arial, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; }
+    fieldset { margin-bottom: 24px; padding: 16px; border-radius: 8px; }
+    label { display: block; margin-top: 8px; font-size: 14px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+    button { margin-top: 12px; padding: 10px 16px; cursor: pointer; }
+    pre { background: #f4f4f4; padding: 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+  </style>
 </head>
 <body>
-  <h1>تطبيق لوغُس قيد الإنشاء</h1>
-  <p>الواجهة الفعلية ستُبنى في مرحلة لاحقة.</p>
+  <h2>صفحة اختبار مؤقتة (ستُحذَف لاحقًا)</h2>
+
+  <fieldset>
+    <legend>1) تحقق من تكرار الهاتف</legend>
+    <label>رقم الهاتف
+      <input id="check-phone" placeholder="مثال: 99998888" />
+    </label>
+    <button onclick="checkPhone()">تحقق</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>2) تسجيل طفل جديد</legend>
+    <label>الاسم الثلاثي
+      <input id="reg-name" placeholder="مثال: مريم جورج فرج" />
+    </label>
+    <label>رقم الهاتف
+      <input id="reg-phone" placeholder="مثال: 99998888" />
+    </label>
+    <label>الرمز السري (4 أرقام)
+      <input id="reg-pin" placeholder="مثال: 1234" maxlength="4" />
+    </label>
+    <label>معرّف الفصل (Class ID) — انسخه من Firebase Console مؤقتًا
+      <input id="reg-class" placeholder="مثال: abc123XYZ" />
+    </label>
+    <button onclick="registerChild()">تسجيل</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>3) تسجيل الدخول</legend>
+    <label>رقم الهاتف
+      <input id="login-phone" placeholder="مثال: 99998888" />
+    </label>
+    <label>الرمز السري
+      <input id="login-pin" placeholder="مثال: 1234" maxlength="4" />
+    </label>
+    <button onclick="loginChild()">دخول</button>
+  </fieldset>
+
+  <h3>النتيجة:</h3>
+  <pre id="result">-- ستظهر النتيجة هنا --</pre>
+
+  <script>
+    const resultEl = document.getElementById('result');
+
+    async function callFn(name, body) {
+      resultEl.textContent = '... جارٍ التنفيذ';
+      try {
+        const res = await fetch(`/.netlify/functions/${name}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        resultEl.textContent = `الحالة: ${res.status}\n` + JSON.stringify(data, null, 2);
+      } catch (e) {
+        resultEl.textContent = 'خطأ في الاتصال: ' + e.message;
+      }
+    }
+
+    function checkPhone() {
+      callFn('checkChildPhoneAvailability', { phone: document.getElementById('check-phone').value });
+    }
+
+    function registerChild() {
+      callFn('registerChild', {
+        fullName: document.getElementById('reg-name').value,
+        phone: document.getElementById('reg-phone').value,
+        pin: document.getElementById('reg-pin').value,
+        classId: document.getElementById('reg-class').value,
+      });
+    }
+
+    function loginChild() {
+      callFn('loginChild', {
+        phone: document.getElementById('login-phone').value,
+        pin: document.getElementById('login-pin').value,
+      });
+    }
+  </script>
 </body>
 </html>

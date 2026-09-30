@@ -11,10 +11,13 @@
     input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
     button { margin-top: 12px; padding: 10px 16px; cursor: pointer; }
     pre { background: #f4f4f4; padding: 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+    #token-status { background: #eef6ff; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 20px; }
   </style>
 </head>
 <body>
   <h2>صفحة اختبار مؤقتة (ستُحذَف لاحقًا)</h2>
+
+  <div id="token-status">لا يوجد رمز جلسة محفوظ حاليًا.</div>
 
   <fieldset>
     <legend>1) تحقق من تكرار الهاتف</legend>
@@ -35,8 +38,8 @@
     <label>الرمز السري (4 أرقام)
       <input id="reg-pin" placeholder="مثال: 1234" maxlength="4" />
     </label>
-    <label>معرّف الفصل (Class ID) — انسخه من Firebase Console مؤقتًا
-      <input id="reg-class" placeholder="jw5PgPRG2hatp37sm0h3" />
+    <label>معرّف الفصل (Class ID)
+      <input id="reg-class" placeholder="مثال: abc123XYZ" />
     </label>
     <button onclick="registerChild()">تسجيل</button>
   </fieldset>
@@ -52,21 +55,56 @@
     <button onclick="loginChild()">دخول</button>
   </fieldset>
 
+  <fieldset>
+    <legend>4) تغيير الرمز السري (يستخدم الرمز المحفوظ تلقائيًا أعلاه)</legend>
+    <label>الرمز الحالي
+      <input id="change-current" placeholder="مثال: 1234" maxlength="4" />
+    </label>
+    <label>الرمز الجديد
+      <input id="change-new" placeholder="مثال: 5678" maxlength="4" />
+    </label>
+    <button onclick="changePin()">تغيير</button>
+  </fieldset>
+
   <h3>النتيجة:</h3>
   <pre id="result">-- ستظهر النتيجة هنا --</pre>
 
   <script>
     const resultEl = document.getElementById('result');
+    const tokenStatusEl = document.getElementById('token-status');
+    let savedToken = null;
 
-    async function callFn(name, body) {
+    function updateTokenStatus() {
+      tokenStatusEl.textContent = savedToken
+        ? '✅ يوجد رمز جلسة محفوظ حاليًا (من آخر تسجيل/دخول ناجح).'
+        : 'لا يوجد رمز جلسة محفوظ حاليًا.';
+    }
+
+    async function callFn(name, body, useAuth = false) {
       resultEl.textContent = '... جارٍ التنفيذ';
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (useAuth) {
+          if (!savedToken) {
+            resultEl.textContent = 'لا يوجد رمز جلسة محفوظ. سجّل دخولًا أو أنشئ حسابًا أولاً (نموذج 2 أو 3).';
+            return;
+          }
+          headers['Authorization'] = `Bearer ${savedToken}`;
+        }
+
         const res = await fetch(`/.netlify/functions/${name}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body),
         });
         const data = await res.json();
+
+        // نحفظ الرمز تلقائيًا كلما رجعت الاستجابة به (تسجيل، دخول، أو تغيير رمز)
+        if (data.token) {
+          savedToken = data.token;
+          updateTokenStatus();
+        }
+
         resultEl.textContent = `الحالة: ${res.status}\n` + JSON.stringify(data, null, 2);
       } catch (e) {
         resultEl.textContent = 'خطأ في الاتصال: ' + e.message;
@@ -92,6 +130,19 @@
         pin: document.getElementById('login-pin').value,
       });
     }
+
+    function changePin() {
+      callFn(
+        'changePin',
+        {
+          currentPin: document.getElementById('change-current').value,
+          newPin: document.getElementById('change-new').value,
+        },
+        true // يتطلب رمز الجلسة المحفوظ
+      );
+    }
+
+    updateTokenStatus();
   </script>
 </body>
 </html>

@@ -1,13 +1,22 @@
 // POST { phone, pin } -> { token, childId }
 //
-// تحقق من تطابق الهاتف والرمز السري، مع حد محاولات فاشلة مزدوج
-// (حسب رقم الهاتف نفسه، القسم 2.2). حد الـ IP سيُضاف في خطوة لاحقة منفصلة
-// بعد اختبار هذا الجزء الأساسي أولاً، تفاديًا لتعقيد الاختبار الأول.
+// تحقق من تطابق الهاتف والرمز السري، مع حد محاولات فاشلة مزدوج تمامًا
+// (حسب رقم الهاتف نفسه + حسب عنوان IP، القسم 2.2) — كلا القيدين مستقل
+// عن الآخر، ويكفي أن يكون أحدهما مقفلاً لرفض المحاولة.
 
 const bcrypt = require('bcryptjs');
 const { getFirestore } = require('./_lib/firebaseAdmin');
 const { issueSessionToken } = require('./_lib/session');
 const { assertNotLocked, recordFailedLogin, clearFailedAttempts } = require('./_lib/rateLimiter');
+
+function getClientIp(event) {
+  const headers = event.headers || {};
+  return (
+    headers['x-nf-client-connection-ip'] ||
+    (headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    'unknown'
+  );
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -22,17 +31,20 @@ exports.handler = async (event) => {
     }
 
     const trimmedPhone = phone.trim();
-    const lockKey = `login:phone:${trimmedPhone}`;
+    const phoneLockKey = `login:phone:${trimmedPhone}`;
+    const ipLockKey = `login:ip:${getClientIp(event)}`;
 
-    // 1) التحقق أولاً أن هذا الرقم غير مقفل حاليًا بسبب محاولات سابقة فاشلة
-    await assertNotLocked(lockKey);
+    // 1) التحقق أولاً أن هذا الرقم وهذا العنوان (IP) غير مقفلين حاليًا
+    await assertNotLocked(phoneLockKey);
+    await assertNotLocked(ipLockKey);
 
     // 2) البحث عن الطفل صاحب هذا الرقم
     const db = getFirestore();
     const snap = await db.collection('children').where('phone', '==', trimmedPhone).limit(1).get();
 
     if (snap.empty) {
-      await recordFailedLogin(lockKey);
+      // نُسجّل الفشل على كلا المفتاحين معًا (الهوية والـ IP) في كل مرة
+      await Promise.all([recordFailedLogin(phoneLockKey), recordFailedLogin(ipLockKey)]);
       return { statusCode: 401, body: JSON.stringify({ error: 'رقم الهاتف أو الرمز السري غير صحيح.' }) };
     }
 
@@ -42,12 +54,12 @@ exports.handler = async (event) => {
     // 3) مقارنة الرمز السري المُدخَل بالنسخة المُشفَّرة المخزّنة
     const pinMatches = await bcrypt.compare(pin, childData.pin);
     if (!pinMatches) {
-      await recordFailedLogin(lockKey);
+      await Promise.all([recordFailedLogin(phoneLockKey), recordFailedLogin(ipLockKey)]);
       return { statusCode: 401, body: JSON.stringify({ error: 'رقم الهاتف أو الرمز السري غير صحيح.' }) };
     }
 
-    // 4) نجاح الدخول: تصفير عدّاد المحاولات الفاشلة وإصدار جلسة جديدة
-    await clearFailedAttempts(lockKey);
+    // 4) نجاح الدخول: تصفير عدّاد المحاولات الفاشلة على كلا المفتاحين، وإصدار جلسة جديدة
+    await Promise.all([clearFailedAttempts(phoneLockKey), clearFailedAttempts(ipLockKey)]);
     const token = issueSessionToken({ id: childDoc.id, role: 'child', mustChangePin: false });
 
     return {
